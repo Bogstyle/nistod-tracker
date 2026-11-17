@@ -1,0 +1,18 @@
+# EXAMPLE ONLY — not the live CatsEyeXI deployment.
+# Copy locally to wrangler.toml and enter IDs for your own Discord/Cloudflare.
+name = "nistod-tracker-REVIEW-ONLY"
+main = "src/index.js"
+compatibility_date = "2026-11-16"
+
+[vars]
+DISCORD_GUILD_ID = "REPLACE_DISCORD_GUILD_ID"
+TRACKER_CHANNEL_ID = "REPLACE_TRACKER_CHANNEL_ID"
+REPORTS_CHANNEL_ID = "REPLACE_REPORTS_CHANNEL_ID"
+
+[triggers]
+crons = ["*/1 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "REPLACE_D1_DATABASE_NAME"
+database_id = "REPLACE_D1_DATABASE_ID"
