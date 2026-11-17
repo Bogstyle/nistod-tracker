@@ -1,13 +1,15 @@
 # Local credentials and deployment-specific configuration
-.env
-.env.*
-!.env.example
 .dev.vars
-.dev.vars.*
-!.dev.vars.example
+**/.dev.vars
+**/.env
+node_modules/
+.wrangler/
+*.sqlite
+*.db
+*.sqlite3
+relay/.nistod-state.json
+relay/.nistod-state.json.tmp
+addon/nistod/nistod_local.lua
+*.log
+# Public repository intentionally includes only wrangler.toml.example
 **/wrangler.toml
-**/.wrangler/
-**/node_modules/
-**/.DS_Store
-**/*.log
-.DS_Store

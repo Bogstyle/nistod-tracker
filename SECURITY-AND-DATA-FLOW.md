@@ -1,3 +1,11 @@
+# Development update — v0.3.0 (not yet deployed)
+
+The old production architecture described below is still v0.2.0. The source repository now also contains an **implemented, opt-in** companion flow: Ashita4 `text_in` gives a local-only candidate; the user manually confirms in ImGui and separately enables transmission; a LuaSocket request goes to loopback **127.0.0.1:38461**, authenticated with an installation-local random key; the Node.js relay persists a queue and posts HTTPS to Cloudflare with a scoped token; D1 stores only the SHA-256 token digest, attributes the ToD to the associated Discord account and logs it with the existing triggers. The Worker rejects unauthenticated, unconfirmed, stale and duplicate reports. `/nistod-lier` and `/nistod-delier` pair and revoke.
+
+A password, Discord bot token or raw Worker bearer token is **never** stored in Lua. The local relay config (`.nistod-state.json`) and local Lua key (`nistod_local.lua`) are gitignored. The game addon never sends incoming/outgoing game packets, actions, target commands or coordinates. The code is **not approved or runtime-tested in CatsEyeXI**, and the pause in reviews does not grant permission.
+
+---
+
 # Security, information scope and data flow
 
 ## Existing production flow (fully external to FFXI)

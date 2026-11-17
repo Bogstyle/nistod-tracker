@@ -10,6 +10,8 @@ if(!DISCORD_APPLICATION_ID||!DISCORD_GUILD_ID||!DISCORD_BOT_TOKEN){
 const commands=[
  {name:'nistod-publier',description:'Publier le panneau NisToD dans le salon configuré (modération).',type:1,default_member_permissions:'32'},
  {name:'nistod-liste',description:'Consulter les prochaines fenêtres NisToD (réponse privée).',type:1},
+ {name:'nistod-lier',description:'Obtenir un code privé temporaire pour l’addon VanaCore/Ashita4.',type:1},
+ {name:'nistod-delier',description:'Révoquer les accès de mes installations NisToD.',type:1},
  {name:'nistod-rafraichir',description:'Actualiser le tableau existant sans publier un nouveau message (modération).',type:1,default_member_permissions:'32'},
  {name:'nistod-retirer',description:'Invalider un ToD en cours et retirer le NM du tableau (modération).',type:1,default_member_permissions:'32',options:[
    {name:'nm',description:'NM à retirer du suivi actif',type:3,required:true,autocomplete:true},

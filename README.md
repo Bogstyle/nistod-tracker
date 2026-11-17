@@ -1,52 +1,34 @@
-# NisToD Tracker — CatsEyeXI addon review
+# NisToD Tracker — Discord + Ashita4/VanaCore
 
-**Status: request for staff review; this repository is not evidence of approval.**
+**Version de développement v0.3.0 — non déployée en production.** Le bot Discord v0.2.0 reste déployé tant que le propriétaire n'applique pas volontairement la migration et le code. Dépôt : https://github.com/Bogstyle/nistod-tracker
 
-Repository: https://github.com/Bogstyle/nistod-tracker  
-Project owner: Nisroch (CatsEyeXI).  
-Source prepared: 17 November 2026. Not affiliated with CatsEyeXI or its staff.
+- [`discord-worker/`](discord-worker/) : Cloudflare Worker avec 37 NM, calendrier fixe/lottery, suivi ToD, `#log`, rappels et modération. En v0.3.0, nouvelle API appairée (`/api/v1/addon/pair`, `/api/v1/addon/events`) et `/nistod-lier`, `/nistod-delier`.
+- [`addon/nistod/`](addon/nistod/) : addon Ashita4 en Lua, panneau ImGui, reconnaissance **indicative** de certaines phrases de mort, sélection manuelle du NM et confirmation humaine obligatoire ; ne contrôle aucune action du jeu.
+- [`relay/`](relay/) : petit relais local **Node.js 20+**, sur loopback (`127.0.0.1`) uniquement, qui détient la clé d'accès Worker et envoie les ToD en HTTPS depuis l'extérieur du jeu ; file d'attente avec retries et anti-doublons.
+- [`DEPLOIEMENT-v0.3.0-FR.md`](DEPLOIEMENT-v0.3.0-FR.md) : installation étape par étape, sans exposer de secrets et sans affecter la v0.2.0 avant déploiement volontaire.
 
-## Two different components
+## Fonctionnement
 
-| Component | Version | Current state | Interaction with FFXI |
-|---|---|---|---|
-| Discord tracker (`discord-worker/`) | v0.2.0 | In use in a community Discord, with **manual** ToD entry | **None** — it does not connect to the game client or game server |
-| Ashita4 / VanaCore addon (`addon/nistod/`) | v0.0.1 | **Local UI demonstration only**, not live-tested and not approved | No packet reads, no scanning, no network, no ToD submissions |
-| Proposed integration | Not built | **Design submitted for staff guidance** | Would read only locally visible combat evidence, ask the user to confirm, then transmit via HTTPS outside the game |
-
-NisToD helps players **share voluntarily reported NM death times** and view estimated next spawn windows. The Discord tracker currently supports 37 NM entries, differentiated between bounded windows and lottery/cooldown behavior. No claim that a lottery monster is guaranteed to appear.
-
-## Source code for review
-
-- [`SUBMISSION-CATSEYEXI.md`](SUBMISSION-CATSEYEXI.md) — complete scope, guardrails and questions for staff.
-- [`GM-TICKET-EN.md`](GM-TICKET-EN.md) — concise text for a GM ticket.
-- [`addon/nistod/nistod.lua`](addon/nistod/nistod.lua) — current local ImGui demo.
-- [`addon/nistod/catalog.lua`](addon/nistod/catalog.lua) — list of 37 NM names and zones.
-- [`discord-worker/src/`](discord-worker/src/) — live v0.2.0 Discord Worker source used as the basis for this review packet.
-- [`SECURITY-AND-DATA-FLOW.md`](SECURITY-AND-DATA-FLOW.md) — present architecture and proposed (not implemented) network flow.
-
-## Current addon limits (important)
-
-The demo allows the user to select an NM and locally simulate “Seen alive” and “Death observed”, with a confirmation step. **It has no real death detector and sends nothing anywhere.** It does not query hidden entities, packet streams, health or target state. It has not been tested in a live VanaCore client. The demo source is supplied for inspection only, not installation on CatsEyeXI pending staff guidance.
-
-## Worker implementation notes
-
-The Discord Worker handles user-entered ToDs, private subscriptions/reminders and an admin invalidation log. Its `/discord/interactions` endpoint verifies Discord's interaction signatures. It currently **does not expose an addon-submission API**. The concept in the submission document must not be mistaken for implemented code.
-
-To inspect the Worker locally with Node.js:
-
-```bash
-cd discord-worker
-npm install
-npm test
+```text
+Message combat visible (ou sélection manuelle)
+  -> suggestion locale en jeu
+  -> le joueur choisit lui-même le NM, sa date et CONFIRME
+  -> Lua : HTTP local sur 127.0.0.1 (avec clé d'installation locale)
+  -> relais Node : file persistante + authentification liée à Discord
+  -> HTTPS Cloudflare Worker : contrôle de la clé, date, NM, doublons, conflits
+  -> D1 / #log / tableau Discord déjà validé
 ```
 
-The source archive originally passed 58 tests; live operator subsequently reported the v0.2.0 menu/form working. The addon is not runtime-tested.
+Aucun ToD n'est envoyé automatiquement suite à un message de chat ; la personne doit d'abord activer la transmission, puis cliquer sur la confirmation finale. `nistod stop` arrête localement les suggestions et les envois. La détection des phrases de mort est volontairement prudente, à adapter au chat effectif de CatsEyeXI lors des tests.
 
-`discord-worker/wrangler.toml.example` is a **sanitized example**. No production D1 identifiers or Discord IDs are included in the example, and real tokens are excluded from this package. Do not deploy this review repository as if it were an operational configuration.
+## Conformité aux règles du serveur
 
-## Policy and approval
+Le staff de CatsEyeXI a signalé une pause indéterminée des reviews. Cette pause n'est **pas une autorisation**. La politique publique classe les addons T0/T2 comme autorisés par défaut mais prévoit explicitement que les **nouveaux addons non listés sont à faire réviser avant usage** : https://catseyexi.com/addon-policy. La branche de développement peut être auditée/testée hors serveur pendant cette période. Le propriétaire garde la possibilité de retirer l'addon immédiatement si le staff le demande.
 
-Official policy: https://catseyexi.com/addon-policy — unlisted addons should be presented to staff via a Discord GM ticket linking their source. Staff must decide whether and under what constraints the proposed addon may be used. A Discord-only bot and an Ashita addon are described separately so the scope is not misleading.
+## Revue et tests
 
-**No license is granted for third-party reuse by this review packet.** The owner can choose a license before public release.
+`cd discord-worker && npm test` — Worker + SQLite D1 ; `cd relay && npm test` — validation HTTP locale ; `cd addon && texlua test-offline.lua nistod` — simulateur Lua sans Ashita.
+
+**Ne pas confondre tests unitaires avec validation dans le client FFXI.** Ne jamais committer un vrai `.dev.vars`, `wrangler.toml`, `relay/.nistod-state.json` ou `addon/nistod/nistod_local.lua`.
+
+Voir aussi [`SUBMISSION-CATSEYEXI.md`](SUBMISSION-CATSEYEXI.md) (soumission historique v0.2.0 et maquette v0.0.1), à actualiser pour une nouvelle revue de la v0.3.0.

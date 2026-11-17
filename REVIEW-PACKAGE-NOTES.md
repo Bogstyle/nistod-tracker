@@ -1,3 +1,9 @@
+# Development update — v0.3.0 (17 November 2026)
+
+This repository has advanced beyond the original review archive. The original notes below refer to the **historical v0.2.0 worker and v0.0.1 addon mockup**, not the latest sources on `main`. For the new sources, see `addon/nistod`, `relay`, `discord-worker/src/addon-api.js`, migration `0006_addon_link.sql` and deployment guide `DEPLOIEMENT-v0.3.0-FR.md`. No secret files, production D1 IDs or Discord tokens have been added.
+
+---
+
 # Source inventory and review scope
 
 Prepared from exact locally available project archives:

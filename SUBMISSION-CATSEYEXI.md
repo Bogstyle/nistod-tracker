@@ -1,3 +1,11 @@
+# Update — NisToD v0.3.0 (development, 17 November 2026)
+
+**The connected implementation has now been developed in source code but has NOT been deployed or approved.** The staff informed the owner that reviews are paused indefinitely. The current productive Discord bot remains v0.2.0, using user-entered ToDs. In branch `main`, the source now includes an Ashita4 UI and passive English combat-log suggestions, manual confirmation, a Node.js 127.0.0.1 relay, temporary Discord pairing codes, a bearer-token-hash-only Worker API and migration 0006. The game never sends actions or outgoing packets; observations are never submitted without two deliberate clicks. The Lua/relay/Worker pipeline has passed local test harnesses but has not been run in VanaCore or on CatsEyeXI. The detection patterns will need calibration on the live chat log.
+
+The server's public policy currently states that *unlisted addons require review before use*. A pause in GM reviewing is not an exception. For testing and classification, review `addon/nistod/`, `relay/` and `discord-worker/src/addon-api.js` together. See `DEPLOIEMENT-v0.3.0-FR.md`.
+
+---
+
 # CatsEyeXI addon review request — NisToD Tracker
 
 **Project:** NisToD Tracker  

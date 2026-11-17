@@ -5,6 +5,7 @@ import {reporterName, deliverReportLogs} from './report-log.js';
 import {normalizeName, pagedNms, stringSelect, timeModal, getComponentValue, parseTimeChoices} from './tod-picker.js';
 import {PICKER_NMS,pickerNmBySlug} from './catalog-picker.js';
 import {activeText,submissionText,isPersistentSpawn,trackedWhere,reminderEventLabel} from './spawn.js';
+import {beginPair,revokePair,addonApi} from './addon-api.js';
 
 const ALERT_SOURCE = 'https://www.bg-wiki.com/ffxi/CatsEyeXI_Content/HNMs';
 const DISCORD = 'https://discord.com/api/v10';
@@ -363,6 +364,16 @@ export async function handleInteraction(i,env,ctx){
   }
   if(i.type===2){
     const name=i.data?.name;
+    if(name==='nistod-lier'){
+      const user=actorId(i);if(!user)return discordReply('Compte Discord absent.');
+      const v=await beginPair(env.DB,user,reporterName(i));
+      return discordReply(`🔐 **Appairage NisToD**\nCode privé à usage unique : **${v.code}**\nValide pendant 10 minutes. Utilise-le uniquement avec ton relais local NisToD. Ne le partage pas.`,true);
+    }
+    if(name==='nistod-delier'){
+      const user=actorId(i);if(!user)return discordReply('Compte Discord absent.');
+      await revokePair(env.DB,user);
+      return discordReply('🔒 Appairages et codes NisToD révoqués. Aucun ToD existant n’est supprimé.');
+    }
     if(name==='nistod-publier'){
       if(!isAdmin(i))return discordReply('Permission Gérer le serveur requise.');
       ctx.waitUntil(publishPanel(env,i));return {type:5,data:{flags:64}};
@@ -548,7 +559,8 @@ async function deliverAlerts(env){
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
-    if(url.pathname==='/health'&&request.method==='GET')return jsonResponse({ok:true,project:'NisToD Tracker',phase:'prototype',version:'0.2.0'});
+    if(url.pathname==='/health'&&request.method==='GET')return jsonResponse({ok:true,project:'NisToD Tracker',phase:'companion opt-in',version:'0.3.0'});
+    if(url.pathname.startsWith('/api/v1/addon/'))return addonApi(request,env,ctx,{updatePanel:()=>updatePanel(env),deliverReportLogs:()=>deliverReportLogs(env)});
     if(url.pathname!=='/discord/interactions'||request.method!=='POST')return new Response('Not found',{status:404});
     const raw=await request.text();
     if(!(await verifyDiscordSignature(raw,request.headers.get('X-Signature-Timestamp'),request.headers.get('X-Signature-Ed25519'),env.DISCORD_PUBLIC_KEY)))

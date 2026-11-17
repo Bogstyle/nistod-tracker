@@ -1,3 +1,9 @@
+# Development note — v0.3.0 (not submitted)
+
+The owner was informed that addon reviews are paused. The public repository now includes the **implemented but not deployed** companion source: passive English combat-log suggestions, explicit user confirmation, a localhost-only relay, and a Discord-linked Worker endpoint. This replaces the earlier UI-only proof of concept described below. No gameplay action is automated; no CatsEyeXI staff approval has been received. The developer can submit an updated request when reviews reopen.
+
+---
+
 **Subject: Addon policy review request — NisToD Tracker (Ashita4 / VanaCore)**
 
 Hello CatsEyeXI staff,
