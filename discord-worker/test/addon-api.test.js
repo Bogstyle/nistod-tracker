@@ -9,7 +9,7 @@ import {beginPair,exchangePair,revokePair,validateReport,saveAddonTod,addonApi} 
 const here=path.dirname(fileURLToPath(import.meta.url));
 function createDb(){
   const sqlite=new DatabaseSync(':memory:');
-  for(const n of [1,2,3,4,5,6])sqlite.exec(fs.readFileSync(path.join(here,'..','migrations',`000${n}_`+({1:'init',2:'dm_subscriptions',3:'reports',4:'tod_wizard_and_moderation',5:'catalog_spawn_modes',6:'addon_link'}[n])+'.sql'),'utf8'));
+  for(const n of [1,2,3,4,5,6,7])sqlite.exec(fs.readFileSync(path.join(here,'..','migrations',`000${n}_`+({1:'init',2:'dm_subscriptions',3:'reports',4:'tod_wizard_and_moderation',5:'catalog_spawn_modes',6:'addon_link',7:'addon_simulations'}[n])+'.sql'),'utf8'));
   const DB={prepare(sql){const stmt=sqlite.prepare(sql);return {
     bind(...args){return {first:async()=>stmt.get(...args)||null,all:async()=>({results:stmt.all(...args)}),run:async()=>({meta:{changes:Number(stmt.run(...args).changes)}})};},
     first:async()=>stmt.get()||null,all:async()=>({results:stmt.all()}),run:async()=>({meta:{changes:Number(stmt.run().changes)}})
@@ -90,4 +90,43 @@ test('HTTP API refuse une clé révoquée sans ajouter de ToD',async()=>{
  const res=await addonApi(req,{DB},{waitUntil:()=>{}});
  assert.equal(res.status,401);
  assert.equal(sqlite.prepare('SELECT count(*) c FROM tod_events').get().c,0);
+});
+
+test('simulation authentifiée: aucune déclaration, aucune alerte, idempotence',async()=>{
+  const {DB,sqlite}=createDb();
+  const pair=await beginPair(DB,user,'Nisroch');
+  const linked=await exchangePair(DB,pair.code);
+  const simulated={...report(),event_type:'SIMULATION',source:'simulation',confirmed_by_user:false};
+  let updates=0,logs=0;const promises=[];
+  const ctx={waitUntil:p=>promises.push(p)};
+  const req=()=>new Request('https://example.workers.dev/api/v1/addon/events',{
+    method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+linked.token},body:JSON.stringify(simulated)});
+  const sideEffects={updatePanel:()=>{updates++},deliverReportLogs:()=>{logs++}};
+  const first=await (await addonApi(req(),{DB},ctx,sideEffects)).json();
+  const again=await (await addonApi(req(),{DB},ctx,sideEffects)).json();
+  await Promise.all(promises);
+  assert.equal(first.state,'simulation');assert.equal(first.duplicate,false);
+  assert.equal(again.state,'simulation');assert.equal(again.duplicate,true);
+  assert.equal(sqlite.prepare('SELECT count(*) c FROM addon_simulations').get().c,1);
+  for(const table of ['tod_events','current_tods','report_log_outbox','dm_subscriptions']){
+    assert.equal(sqlite.prepare(`SELECT count(*) c FROM ${table}`).get().c,0,table);
+  }
+  assert.equal(updates,0);assert.equal(logs,0);
+});
+
+test('envoi automatique: refus d une preuve partielle, acceptation packet 0x029 6/20',async()=>{
+  const base=report({source:'packet_death',confirmed_by_user:false,evidence_kind:'packet_0x029_death',death_message_id:6,target_id:17452400});
+  assert.equal(validateReport(base).source,'packet_death');
+  assert.equal(validateReport({...base,death_message_id:20}).source,'packet_death');
+  for(const malformed of [
+    {...base,evidence_kind:'chat'}, {...base,death_message_id:3},
+    {...base,target_id:0}, {...base,target_id:-1},
+    {...base,target_id:1.5}, {...base,confirmed_by_user:true},
+    {...base,event_type:'SIMULATION'},
+  ])assert.throws(()=>validateReport(malformed));
+  const {DB,sqlite}=createDb();
+  const actor={discord_user_id:user,reporter_display_name:'Nisroch'};
+  const result=await saveAddonTod(DB,actor,base);
+  assert.equal(result.body.state,'accepted');
+  assert.equal(sqlite.prepare('SELECT count(*) c FROM current_tods').get().c,1);
 });

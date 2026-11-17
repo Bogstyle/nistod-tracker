@@ -1,24 +1,16 @@
-# Development note — v0.3.0 (not submitted)
-
-The owner was informed that addon reviews are paused. The public repository now includes the **implemented but not deployed** companion source: passive English combat-log suggestions, explicit user confirmation, a localhost-only relay, and a Discord-linked Worker endpoint. This replaces the earlier UI-only proof of concept described below. No gameplay action is automated; no CatsEyeXI staff approval has been received. The developer can submit an updated request when reviews reopen.
-
----
-
-**Subject: Addon policy review request — NisToD Tracker (Ashita4 / VanaCore)**
+**Subject: NisToD Tracker — review pending, update to automatic read-only combat event detection**
 
 Hello CatsEyeXI staff,
 
-I would like to request a policy review before using an in-game addon associated with **NisToD Tracker**. My in-game character is **Nisroch**.
+Thank you for explaining that reviews of new addons are paused indefinitely. I understand this is not an approval of NisToD.
 
-The project currently has two **separate** parts:
+For transparency, the public source now contains **a beta Ashita4 addon** that passively reads incoming `0x029` action-message packets, looking only for explicit death codes 6/20 and verifying a visible entity's server ID and exact NM name. It performs **no actions against the game**: no movement, targeting, claims, outgoing packets or commands. Unlike our earlier prototype, it automatically sends a confirmed packet observation to an external Discord tracker without a manual click. The addon shows a local chat confirmation only after the receiving Worker acknowledges it.
 
-1. **Discord bot v0.2.0 (already operational):** players manually report NM/HNM death times in Discord; the bot displays estimated respawn windows, lottery cooldown information, optional DM reminders and an audit log. **It does not interact with the FFXI game client or server.**
-2. **Ashita4/VanaCore prototype v0.0.1 (not live-tested or connected):** a local ImGui mockup listing 37 NMs with simulated “seen alive” and “death observed” buttons. The demonstration has **no network access, packet reading, target scanning, or gameplay actions**; nothing is transmitted or recorded.
+The source also contains an authenticated test command (`/nistod sim behemoth`) that does not publish a real ToD.
 
-**Future functionality, only if approved:** use unambiguous combat information already visible to the local player to suggest a death; require the player's explicit confirmation of the NM/time/zone; then send a minimal authenticated HTTPS report to our external Discord Worker. There would be **no unattended gameplay, automated claim/target/attack/movement, hidden-entity access or game-server packet injection**. This connected feature is **not implemented yet**.
+Source: https://github.com/Bogstyle/nistod-tracker
+Technical details: https://github.com/Bogstyle/nistod-tracker/blob/main/SECURITY-AND-DATA-FLOW.md
 
-Could staff advise (a) whether the local prototype is considered T0/T2 and can be tested, (b) which sources of visible game information may be used, and (c) whether manually confirmed HTTPS sharing of ToDs with a Discord tracker is allowed? We will submit the final connected code for further review before using it in game.
+We would appreciate clarification when reviews resume regarding whether automatic community-sharing of received combat information is permitted. We will disable/revoke the addon if required.
 
-**Full source and technical description:** https://github.com/Bogstyle/nistod-tracker
-
-Thank you for reviewing this project. We will follow the staff's classification and restrictions.
+Thank you, Nisroch

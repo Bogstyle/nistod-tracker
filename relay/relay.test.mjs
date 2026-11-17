@@ -55,3 +55,43 @@ test('relancer un refus permanent exige une action manuelle et conserve event_id
  await r.flush();assert.equal(state.queue[0].state,'delivered');
  assert.equal(seen.length,2);assert.equal(seen[0].event_id,seen[1].event_id);
 });
+
+test('simulation authentifiée du relais: aucun ToD réel envoyé et accusé vérifiable',async t=>{
+  const requests=[];
+  const {port,state,r}=await withServer(t,async(url,opts)=>{
+    const data=JSON.parse(opts.body);requests.push(data);
+    return new Response(JSON.stringify({ok:true,state:'simulation',event_id:data.event_id}),{status:200,headers:{'content-type':'application/json'}});
+  });
+  const root='http://127.0.0.1:'+port;
+  const params=new URLSearchParams({source:'simulation',confirmed:'no',nm_slug:'behemoth',observed_at_utc:old,client_request_id:'simulation_123456789'});
+  const headers={'content-type':'application/x-www-form-urlencoded','x-nistod-local-key':state.local_key};
+  assert.equal((await fetch(root+'/submit',{method:'POST',headers,body:params})).status,202);
+  await r.flush();
+  assert.equal(requests.length,1);
+  assert.equal(requests[0].event_type,'SIMULATION');
+  assert.equal(requests[0].confirmed_by_user,false);
+  assert.equal(requests[0].source,'simulation');
+  const status=await (await fetch(root+'/status?id=simulation_123456789',{headers})).json();
+  assert.equal(status.state,'delivered');assert.equal(status.remote_state,'simulation');
+});
+
+test('mort packet 0x029: données de preuve validées et relayées',async t=>{
+  const received=[];
+  const {port,state,r}=await withServer(t,async(url,opts)=>{
+    received.push(JSON.parse(opts.body));
+    return new Response(JSON.stringify({ok:true,state:'accepted'}),{status:200,headers:{'content-type':'application/json'}});
+  });
+  const root='http://127.0.0.1:'+port,headers={'content-type':'application/x-www-form-urlencoded','x-nistod-local-key':state.local_key};
+  const params=new URLSearchParams({source:'packet_death',confirmed:'no',nm_slug:'behemoth',observed_at_utc:old,
+    client_request_id:'packetdeath_123456789',death_message_id:'6',target_id:'17452400'});
+  assert.equal((await fetch(root+'/submit',{method:'POST',headers,body:params})).status,202);
+  await r.flush();assert.equal(received.length,1);
+  assert.equal(received[0].event_type,'KILL_CONFIRMED');
+  assert.equal(received[0].evidence_kind,'packet_0x029_death');
+  assert.equal(received[0].death_message_id,6);
+  assert.equal(received[0].target_id,17452400);
+  assert.equal(received[0].confirmed_by_user,false);
+  assert.equal(received[0].source,'packet_death');
+  const bad=new URLSearchParams(params);bad.set('death_message_id','3');
+  assert.equal((await fetch(root+'/submit',{method:'POST',headers,body:bad})).status,400);
+});

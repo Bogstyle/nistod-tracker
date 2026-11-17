@@ -1,34 +1,41 @@
-# NisToD Tracker — Discord + Ashita4/VanaCore
+# NisToD Tracker — v0.3.1 beta
 
-**Version de développement v0.3.0 — non déployée en production.** Le bot Discord v0.2.0 reste déployé tant que le propriétaire n'applique pas volontairement la migration et le code. Dépôt : https://github.com/Bogstyle/nistod-tracker
+**CatsEyeXI community NM/HNM ToD tracker** — [GitHub repository](https://github.com/Bogstyle/nistod-tracker).
 
-- [`discord-worker/`](discord-worker/) : Cloudflare Worker avec 37 NM, calendrier fixe/lottery, suivi ToD, `#log`, rappels et modération. En v0.3.0, nouvelle API appairée (`/api/v1/addon/pair`, `/api/v1/addon/events`) et `/nistod-lier`, `/nistod-delier`.
-- [`addon/nistod/`](addon/nistod/) : addon Ashita4 en Lua, panneau ImGui, reconnaissance **indicative** de certaines phrases de mort, sélection manuelle du NM et confirmation humaine obligatoire ; ne contrôle aucune action du jeu.
-- [`relay/`](relay/) : petit relais local **Node.js 20+**, sur loopback (`127.0.0.1`) uniquement, qui détient la clé d'accès Worker et envoie les ToD en HTTPS depuis l'extérieur du jeu ; file d'attente avec retries et anti-doublons.
-- [`DEPLOIEMENT-v0.3.0-FR.md`](DEPLOIEMENT-v0.3.0-FR.md) : installation étape par étape, sans exposer de secrets et sans affecter la v0.2.0 avant déploiement volontaire.
+## Current components
 
-## Fonctionnement
+- `discord-worker/` — Cloudflare Worker, Discord UI, D1, subscriptions, mod audit, authenticated addon API.
+- `addon/nistod/` — Ashita4/VanaCore Lua addon. **Automatically observes exact NPC deaths using incoming read-only action-message packets `0x029`**; no chat text dependency. Does not send any gameplay action or modify a packet.
+- `relay/` — local Node.js server listening **only on `127.0.0.1:38461`**, reliably queues events and forwards via HTTPS with a revocable Discord-linked token. No Discord bot token in the addon.
 
-```text
-Message combat visible (ou sélection manuelle)
-  -> suggestion locale en jeu
-  -> le joueur choisit lui-même le NM, sa date et CONFIRME
-  -> Lua : HTTP local sur 127.0.0.1 (avec clé d'installation locale)
-  -> relais Node : file persistante + authentification liée à Discord
-  -> HTTPS Cloudflare Worker : contrôle de la clé, date, NM, doublons, conflits
-  -> D1 / #log / tableau Discord déjà validé
+Production Discord bot was confirmed functional at v0.2.0. **v0.3.1 code is a beta, not deployed or tested in a real VanaCore client by this project.** Follow [`DEPLOIEMENT-v0.3.1-FR.md`](DEPLOIEMENT-v0.3.1-FR.md) before any voluntary deployment.
+
+## Automatic detection, not chat filtering
+
+Ashita4 `packet_in` receives unmodified incoming packets. We use **message IDs 6 and 20 from `0x029`**, followed by checks that the dying entity's **full server ID and exact name** match a member of the 37-NM catalog. The event is queued for the local relay with no player interaction; the addon only prints **`[NisToD] ToD TRANSMIS et accepte` after the Cloudflare Worker has accepted it**. Duplicate deaths of the same entity are suppressed for 10 minutes. Name or ID unknown? Ignore instead of risking a false report.
+
+The packet path does not require `text_in`, and so should be independent of UI chat filters. It cannot detect deaths the **client never receives**, and cannot know a name after the entity has already been removed from the client entity table; such events are deliberately skipped. These cases require real-game testing.
+
+**Automatic sending starts when the relay configuration file `nistod_local.lua` exists.** `/nistod auto off`, `/nistod stop`, stopping the relay, or `/nistod-delier` can disable it. No auto-target/claim/attack/movement, no outgoing game packets.
+
+## Safe end-to-end simulation
+
+`/nistod sim behemoth` sends an authenticated `SIMULATION` event through the same addon→local relay→Worker path. The Worker stores it only in `addon_simulations` (migration `0007`), **never** in `tod_events`, `current_tods`, reminders or `#log`, and never updates the public panel. On confirmation the addon prints **`SIMULATION RECUE par Cloudflare ... aucun ToD publie`**. Requires pairing and running relay; does not pretend that a packet was received.
+
+The regular button for *manual death declarations* remains available with human confirmation and UTC time adjustment. It is not required when an explicit packet death is recognized.
+
+## Tests (without FFXI)
+
+```bash
+cd discord-worker && npm install && npm test   # 66 JS tests
+cd ../relay && npm test                          # 7 relay & full API+SQLite integration tests
+cd .. && texlua addon/test-offline.lua addon/nistod # 31 Lua tests
 ```
 
-Aucun ToD n'est envoyé automatiquement suite à un message de chat ; la personne doit d'abord activer la transmission, puis cliquer sur la confirmation finale. `nistod stop` arrête localement les suggestions et les envois. La détection des phrases de mort est volontairement prudente, à adapter au chat effectif de CatsEyeXI lors des tests.
+Tests verify packet decoding, filter-independent matching, exact entity ID/name verification, forged packet rejection, rate-limited dedup, delivered-only chat notification, simulation with zero real ToD, registration, token pairing, and historic Worker behavior. A test suite cannot prove specific CatsEyeXI packet delivery/format in game.
 
-## Conformité aux règles du serveur
+## Staff policy
 
-Le staff de CatsEyeXI a signalé une pause indéterminée des reviews. Cette pause n'est **pas une autorisation**. La politique publique classe les addons T0/T2 comme autorisés par défaut mais prévoit explicitement que les **nouveaux addons non listés sont à faire réviser avant usage** : https://catseyexi.com/addon-policy. La branche de développement peut être auditée/testée hors serveur pendant cette période. Le propriétaire garde la possibilité de retirer l'addon immédiatement si le staff le demande.
+The [CatsEyeXI addon policy](https://catseyexi.com/addon-policy) distinguishes information addons from gameplay automation, but the staff has paused reviews of new addons indefinitely (as reported by the owner). **A paused review is not permission.** The new automatic reporting behavior has **not** been approved. The source is public for inspection and can be disabled/revoked.
 
-## Revue et tests
-
-`cd discord-worker && npm test` — Worker + SQLite D1 ; `cd relay && npm test` — validation HTTP locale ; `cd addon && texlua test-offline.lua nistod` — simulateur Lua sans Ashita.
-
-**Ne pas confondre tests unitaires avec validation dans le client FFXI.** Ne jamais committer un vrai `.dev.vars`, `wrangler.toml`, `relay/.nistod-state.json` ou `addon/nistod/nistod_local.lua`.
-
-Voir aussi [`SUBMISSION-CATSEYEXI.md`](SUBMISSION-CATSEYEXI.md) (soumission historique v0.2.0 et maquette v0.0.1), à actualiser pour une nouvelle revue de la v0.3.0.
+Project-specific security notes: [`SECURITY-AND-DATA-FLOW.md`](SECURITY-AND-DATA-FLOW.md). No production secrets or populated `wrangler.toml` are in this repository.

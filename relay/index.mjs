@@ -54,11 +54,17 @@ function parseBody(req){return new Promise((resolve,reject)=>{
   req.on('end',()=>resolve(body));req.on('error',reject);
 });}
 function validSubmission(body){
-  if(body.confirmed!=='yes'||!/^\w[\w-]{0,79}$/.test(body.nm_slug||''))return false;
+  if(!/^\w[\w-]{0,79}$/.test(body.nm_slug||''))return false;
   if(!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(body.observed_at_utc||''))return false;
-  const death=Date.parse(body.observed_at_utc);
-  if(!Number.isFinite(death)||death>Date.now()+300000||death<Date.now()-14*86400000)return false;
-  return ['manual','chat_suggestion'].includes(body.source)&&/^[a-zA-Z0-9_-]{12,80}$/.test(body.client_request_id||'');
+  const date=Date.parse(body.observed_at_utc);
+  if(!Number.isFinite(date)||date>Date.now()+300000||date<Date.now()-14*86400000)return false;
+  if(!/^[a-zA-Z0-9_-]{12,80}$/.test(body.client_request_id||''))return false;
+  if(body.source==='simulation')return body.confirmed==='no';
+  if(body.source==='packet_death')return body.confirmed==='no'
+    &&(body.death_message_id==='6'||body.death_message_id==='20')
+    &&/^\d{1,10}$/.test(body.target_id||'')
+    &&Number(body.target_id)>0&&Number(body.target_id)<=0xFFFFFFFF;
+  return (body.source==='manual'||body.source==='chat_suggestion')&&body.confirmed==='yes';
 }
 export function createRelayServer(state,saveState=atomicSave,remoteFetch=fetch){
   const deliveries=new Map();
@@ -72,11 +78,21 @@ export function createRelayServer(state,saveState=atomicSave,remoteFetch=fetch){
         try{
           const req=await remoteFetch(state.worker+'/api/v1/addon/events',{
             method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+state.token},
-            body:JSON.stringify({event_id:item.event_id,nm_slug:item.nm_slug,event_type:'KILL_CONFIRMED',confirmed_by_user:true,observed_at_utc:item.observed_at_utc,source:item.source}),
+            body:JSON.stringify({event_id:item.event_id,nm_slug:item.nm_slug,event_type:item.source==='simulation'?'SIMULATION':'KILL_CONFIRMED',
+              confirmed_by_user:item.source!=='simulation'&&item.source!=='packet_death',
+              evidence_kind:item.source==='packet_death'?'packet_0x029_death':undefined,
+              death_message_id:item.source==='packet_death'?item.death_message_id:undefined,
+              target_id:item.source==='packet_death'?item.target_id:undefined,
+              observed_at_utc:item.observed_at_utc,source:item.source}),
             signal:AbortSignal.timeout(8000)
           });
           const data=await req.json().catch(()=>({}));
-          if(req.ok&&data.ok){item.state='delivered';item.message=data.state==='conflict'?'Signalement contradictoire journalisé':'ToD accepté';item.event_id_server=data.event_id;}
+          if(req.ok&&data.ok){
+            item.state='delivered';item.remote_state=data.state;
+            item.message=data.state==='simulation'?'Simulation acceptee (aucun ToD public)':
+              data.state==='conflict'?'Signalement contradictoire journalise':'ToD accepte';
+            item.event_id_server=data.event_id;
+          }
           else if(req.status===401||req.status===403||req.status===400||req.status===404){item.state='failed';item.message='Refus du Worker : '+String(data.error||req.status).slice(0,100);}
           else throw Error('Worker HTTP '+req.status);
         }catch(e){item.attempts++;item.message=String(e.message||e).slice(0,110);item.next_attempt_at=Date.now()+Math.min(300000,5000*(2**Math.min(5,item.attempts)));}
@@ -90,7 +106,7 @@ export function createRelayServer(state,saveState=atomicSave,remoteFetch=fetch){
     const url=new URL(req.url,'http://127.0.0.1');
     if(req.method==='GET'&&url.pathname==='/status'){
       const id=url.searchParams.get('id');const item=state.queue.find(x=>x.client_request_id===id);
-      writeJson(res,item?200:404,item?{ok:true,state:item.state,message:item.message||'',event_id:item.event_id_server||null}:{ok:false,error:'Envoi inconnu'});return;
+      writeJson(res,item?200:404,item?{ok:true,state:item.state,message:item.message||'',remote_state:item.remote_state||null,event_id:item.event_id_server||null}:{ok:false,error:'Envoi inconnu'});return;
     }
     if(req.method==='POST'&&url.pathname==='/retry'){
       if(!/^application\/x-www-form-urlencoded/i.test(req.headers['content-type']||'')){writeJson(res,415,{ok:false,error:'Content-Type invalide'});return;}
@@ -113,7 +129,9 @@ export function createRelayServer(state,saveState=atomicSave,remoteFetch=fetch){
         if(previous){writeJson(res,202,{ok:true,state:previous.state,id:previous.client_request_id});return;}
         if(!state.token){writeJson(res,409,{ok:false,error:'Relais non appairé : /nistod-lier puis pair'});return;}
         if(state.queue.filter(x=>x.state==='queued').length>=MAX_QUEUE){writeJson(res,429,{ok:false,error:'File d’attente pleine'});return;}
-        const item={client_request_id:body.client_request_id,event_id:crypto.randomUUID(),nm_slug:body.nm_slug,observed_at_utc:body.observed_at_utc,source:body.source,state:'queued',attempts:0,next_attempt_at:Date.now(),message:'En attente de transmission',created_at:utc()};
+        const item={client_request_id:body.client_request_id,event_id:crypto.randomUUID(),nm_slug:body.nm_slug,observed_at_utc:body.observed_at_utc,source:body.source,
+          death_message_id:body.source==='packet_death'?Number(body.death_message_id):null,
+          target_id:body.source==='packet_death'?Number(body.target_id):null,state:'queued',attempts:0,next_attempt_at:Date.now(),message:'En attente de transmission',created_at:utc()};
         state.queue.push(item);
         // Prune delivered items only, never silently lose pending submissions.
         if(state.queue.length>1000)state.queue=state.queue.filter(x=>x.state==='queued'||x.state==='failed').concat(state.queue.filter(x=>x.state==='delivered').slice(-100));

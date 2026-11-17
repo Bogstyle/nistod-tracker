@@ -1,62 +1,31 @@
-# Update — NisToD v0.3.0 (development, 17 November 2026)
+# NisToD Tracker v0.3.1 — Updated CatsEyeXI review dossier
 
-**The connected implementation has now been developed in source code but has NOT been deployed or approved.** The staff informed the owner that reviews are paused indefinitely. The current productive Discord bot remains v0.2.0, using user-entered ToDs. In branch `main`, the source now includes an Ashita4 UI and passive English combat-log suggestions, manual confirmation, a Node.js 127.0.0.1 relay, temporary Discord pairing codes, a bearer-token-hash-only Worker API and migration 0006. The game never sends actions or outgoing packets; observations are never submitted without two deliberate clicks. The Lua/relay/Worker pipeline has passed local test harnesses but has not been run in VanaCore or on CatsEyeXI. The detection patterns will need calibration on the live chat log.
+**Owner:** Nisroch / Bogstyle  
+**Public source:** https://github.com/Bogstyle/nistod-tracker  
+**Approval status:** NOT APPROVED; staff reports addon reviews currently suspended indefinitely. Do not mistake the ability to build or test the code for an authorization to use it on the server.
 
-The server's public policy currently states that *unlisted addons require review before use*. A pause in GM reviewing is not an exception. For testing and classification, review `addon/nistod/`, `relay/` and `discord-worker/src/addon-api.js` together. See `DEPLOIEMENT-v0.3.0-FR.md`.
+## Functional description
 
----
+Existing: Discord bot v0.2.0 with voluntarily reported NM deaths, 37 NM entries, spawn windows/lottery labels, audit logs, reminders and moderation.
 
-# CatsEyeXI addon review request — NisToD Tracker
+Proposed connected beta: Ashita4/VanaCore addon v0.3.1 plus a local Node relay and Cloudflare Worker API. The addon **passively** observes incoming 0x029 action-message packets, selects message IDs 6/20 indicating death, verifies the full server ID and name of a locally visible NM in the catalog, and transmits automatically without the player's per-death confirmation. It never acts in the game world and does not use `text_in` for detection.
 
-**Project:** NisToD Tracker  
-**Author / CatsEyeXI character:** Nisroch  
-**Environment:** CatsEyeXI, FFXI client via VanaCore / Ashita4 (future addon), Discord bot via Cloudflare Workers + D1  
-**Submission date:** 17 November 2026  
-**Source:** https://github.com/Bogstyle/nistod-tracker  
-**Requested status:** Staff review **before use of any connected in-game addon**.
+## Scope and limits
 
-## Purpose
+- No `packet_out`, packet injection or modification; no claiming, attacking, movement, targeting or automation of gameplay.
+- Read-only access to incoming 0x029 messages and locally known entity name/ID, not remote/hidden entities.
+- The client may lack the packet or entity data; the addon will fail closed and miss such cases.
+- Duplicate-suppression by entity and cooldown; backend idempotency by UUID, conflict handling and moderator invalidation.
+- No Discord bot token in the addon. A token scoped to the paired user stays in a local Node companion. Events use TLS to the Worker and are attributed to the authenticated account.
+- Automatic events are marked `source=packet_death`, include message ID, server entity ID and UTC time. The cloud cannot independently verify that a client genuinely received a packet.
+- In-game chat notification only after confirmed delivery to the Worker.
+- Safe `SIMULATION` event is persisted only in an isolated D1 table, never as a live ToD, journal item or reminder.
 
-Offer a community, opt-in ToD (time of death) register for notorious monsters and HNMs. Players manually submit a witnessed death time in Discord; the bot calculates an estimated respawn window or, for lottery spawns, an **earliest possible return** rather than a guaranteed spawn. The tracker currently has 37 entries. Any community member using the Discord server can read the shared panel; no game-state detection is currently in use.
+## Questions for future staff review
 
-## What already exists and is in use
+1. Does purely passive `0x029` read-only packet handling fall within T2 on CatsEyeXI?
+2. Does **automatically sharing** that observation with external Discord viewers change the classification despite no gameplay action?
+3. Are the locally visible entity ID/name lookups acceptable?
+4. Are additional rate limits, staff controls or changes to the automatic reporting behavior needed?
 
-- An **external Discord bot** (v0.2.0), running on Cloudflare Workers and D1; users report ToDs by choosing an NM and entering a date/time. It maintains an auditable `#log`, permits moderator invalidation and optional Discord DMs.
-- It **does not log in to FFXI, read game packets, access a character, control input, or contact the CatsEyeXI game server**.
-- Its reminders are Discord messages only; they perform no actions on a character.
-
-## What the submitted Ashita4 addon does TODAY
-
-The included v0.0.1 is an **offline, local UI mockup**, not a production addon. Its ImGui panel lists the same 37 NMs and lets a player simulate “seen alive” or “death observed,” review the timestamp, and confirm or cancel locally. There are **no network requests, Discord messages, game packets, entity scans or game commands**. It has not been executed/tested in a live VanaCore client and is not being represented as approved.
-
-## What we would like to build IF staff approves
-
-1. A passive, read-only helper that looks **only at information normally visible to that player** (for example, unambiguous combat messages already shown to the client). We will follow any staff restrictions on which Ashita events/data can be used.
-2. It may suggest that a tracked NM died, but it will **never infer death from despawning, disappearance from target or Wide Scan, zoning, or an entity appearing when entering a zone**.
-3. The player must **manually confirm** the NM, zone (where relevant) and observed time. Unclear evidence cannot become an automatic ToD.
-4. Only after confirmation, an authenticated **HTTPS request to our external Discord Worker**, never a packet to the FFXI server. We will use pairing/revocable installation credentials (not the Discord bot token), minimal data and rate limits. This endpoint and pairing system **do not yet exist**.
-5. We may later show upcoming community-reported windows inside a passive UI. No targeting, claiming, attacking, movement, macros, pathfinding, scans of hidden entities, or automatic gameplay actions, attended or unattended.
-
-## Boundaries and anti-abuse controls
-
-- No unattended play, automated claims, auto-targeting, skill usage, movement or actions sent to the game server.
-- No visibility into hidden/invisible entities, off-screen information not legitimately available to the client, other players' private information, or server-only data.
-- No packet injection, altered client/server timing, or bypass of gameplay restrictions.
-- No automatic publication from ambiguous observations. Human-confirmed reports remain attributable and moderators can invalidate erroneous ToDs; the Discord audit trail remains.
-- Outgoing data would be minimized (NM identifier, relevant zone, observation time, installation/account authorization, evidence class); no inventory, coordinates, messages by third parties or raw combat-log dumps.
-- The fully connected implementation would be submitted for **a new review** before any in-game use; the mockup is not a substitute for reviewing unbuilt code.
-
-## Questions for CatsEyeXI staff
-
-1. Is the **external, manually operated Discord ToD tracker** subject to any CatsEyeXI addon restrictions, given that it has no game-client integration?
-2. Would an **on-screen, local-only ImGui NM notebook** (current prototype) fit T0/T2 under the policy, and may it be tested in-game?
-3. May an Ashita4 addon read **only combat messages already visible to the player** to suggest an NM death, with an explicit human confirmation? Are there preferred APIs/events or excluded sources?
-4. Is a **player-confirmed outbound HTTPS submission to a third-party Discord bot** acceptable? Does sharing community HNM timers raise any separate policy concerns?
-5. Which exact changes would require renewed approval, and would staff like a separate ticket when the connected addon code exists?
-
-We are asking for a classification and guardrails, **not claiming the current or future addon is approved**. We will keep the in-game integration disabled until receiving a clear staff verdict, and can adjust the source based on feedback.
-
-## References
-
-- Official CatsEyeXI addon policy: https://catseyexi.com/addon-policy
-- Source files: `addon/nistod/`, `discord-worker/src/`, `discord-worker/migrations/`.
+References: https://catseyexi.com/addon-policy and [`SECURITY-AND-DATA-FLOW.md`](SECURITY-AND-DATA-FLOW.md).

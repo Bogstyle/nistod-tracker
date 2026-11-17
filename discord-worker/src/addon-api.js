@@ -48,15 +48,40 @@ function bearerToken(request){const auth=request.headers.get('authorization')||'
 export function validateReport(body,now=Date.now()){
   if(!body||typeof body!=='object'||Array.isArray(body))throw Object.assign(Error('Invalid event'),{status:400});
   if(!/^[0-9a-f-]{36}$/i.test(body.event_id||'')||!/^\w[\w-]{0,79}$/.test(body.nm_slug||''))throw Object.assign(Error('Invalid event identity'),{status:400});
-  if(body.event_type!=='KILL_CONFIRMED'||body.confirmed_by_user!==true)throw Object.assign(Error('Human confirmation required'),{status:400});
+  const isSimulation=body.event_type==='SIMULATION';
+  const isDeath=body.event_type==='KILL_CONFIRMED';
+  if(!isSimulation&&!isDeath)throw Object.assign(Error('Unsupported event type'),{status:400});
   const death=Date.parse(body.observed_at_utc||'');
   if(!Number.isFinite(death)||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(body.observed_at_utc||''))throw Object.assign(Error('Invalid UTC timestamp'),{status:400});
   if(death>now+5*60_000||death<now-MAX_AGE_MS)throw Object.assign(Error('Timestamp outside allowed period'),{status:400});
-  if(body.source!==undefined&&!['manual','chat_suggestion'].includes(body.source))throw Object.assign(Error('Invalid source'),{status:400});
-  return {event_id:body.event_id.toLowerCase(),nm_slug:body.nm_slug,observed_at_utc:new Date(death).toISOString(),source:body.source||'manual'};
+  if(isSimulation){
+    if(body.source!=='simulation'||body.confirmed_by_user!==false)throw Object.assign(Error('Invalid simulation identity'),{status:400});
+  }else if(body.source==='packet_death'){
+    // The client supplies evidence metadata; the server cannot itself verify game packets.
+    if(body.confirmed_by_user!==false || body.evidence_kind!=='packet_0x029_death'
+       || ![6,20].includes(body.death_message_id)
+       || !Number.isInteger(body.target_id)||body.target_id<1||body.target_id>0xFFFFFFFF)
+       throw Object.assign(Error('Invalid packet death evidence'),{status:400});
+  }else if(body.confirmed_by_user!==true||!['manual','chat_suggestion'].includes(body.source||'manual')){
+    throw Object.assign(Error('Human confirmation required'),{status:400});
+  }
+  return {event_id:body.event_id.toLowerCase(),nm_slug:body.nm_slug,
+    event_type:body.event_type,observed_at_utc:new Date(death).toISOString(),
+    source:body.source||'manual'};
+}
+export async function saveAddonSimulation(db,actor,body,now=Date.now()){
+  const entry=validateReport(body,now);
+  if(entry.event_type!=='SIMULATION')throw Object.assign(Error('Invalid simulation type'),{status:400});
+  const nm=await db.prepare('SELECT slug FROM nm_catalog WHERE enabled=1 AND slug=?').bind(entry.nm_slug).first();
+  if(!nm)return {status:404,body:{ok:false,error:'NM absent du catalogue'}};
+  const result=await db.prepare('INSERT OR IGNORE INTO addon_simulations(event_id,discord_user_id,nm_slug,received_at_utc) VALUES(?,?,?,?)')
+    .bind(entry.event_id,actor.discord_user_id,nm.slug,new Date(now).toISOString()).run();
+  return {status:200,body:{ok:true,state:'simulation',duplicate:!result.meta?.changes,
+    event_id:entry.event_id,description:'SIMULATION recue ; aucun ToD, aucune alerte et aucune mise a jour publique'}};
 }
 export async function saveAddonTod(db,actor,body,now=Date.now()){
   const entry=validateReport(body,now);
+  if(entry.event_type!=='KILL_CONFIRMED')throw Object.assign(Error('Only death events can create ToDs'),{status:400});
   const nm=await db.prepare('SELECT * FROM nm_catalog WHERE enabled=1 AND slug=?').bind(entry.nm_slug).first();
   if(!nm)return {status:404,body:{ok:false,error:'NM absent du catalogue'}};
   const id=`addon:${entry.event_id}`;
@@ -95,9 +120,13 @@ export async function addonApi(request,env,ctx,sideEffects={}){
     if(!token)return responseJson({ok:false,error:'Non authentifié'},401);
     const actor=await env.DB.prepare('SELECT discord_user_id,reporter_display_name FROM addon_tokens WHERE token_hash=? AND revoked_at_utc IS NULL').bind(await sha256(token)).first();
     if(!actor)return responseJson({ok:false,error:'Appairage révoqué ou absent'},401);
-    const outcome=await saveAddonTod(env.DB,actor,payload);
-    if(outcome.body.ok&&!outcome.body.duplicate){
+    const outcome=payload?.event_type==='SIMULATION'
+      ?await saveAddonSimulation(env.DB,actor,payload)
+      :await saveAddonTod(env.DB,actor,payload);
+    if(outcome.body.ok&&!outcome.body.duplicate&&outcome.body.state!=='simulation'){
       ctx.waitUntil(Promise.allSettled([sideEffects.updatePanel?.(),sideEffects.deliverReportLogs?.()]));
+    }
+    if(outcome.body.ok){
       ctx.waitUntil(env.DB.prepare('UPDATE addon_tokens SET last_used_at_utc=? WHERE token_hash=?').bind(iso(),await sha256(token)).run());
     }
     return responseJson(outcome.body,outcome.status);
