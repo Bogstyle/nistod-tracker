@@ -109,13 +109,22 @@ local function check_delivery()
     local code, body=relay_request('GET','/status?id=' .. urlenc(state.last_request_id));
     if code==200 then
         local delivery=(body or ''):match('"state"%s*:%s*"([a-z]+)"') or 'unknown';
+        local detail=(body or ''):match('"message"%s*:%s*"([^"]*)"') or '';
         state.last_delivery=delivery;
-        state.last_result=delivery=='delivered' and '✅ Enregistré côté Discord / Cloudflare'
-          or delivery=='failed' and '❌ Échec définitif (vérifie la console du relais)'
-          or '⏳ En attente de transmission au Worker';
+        state.last_result=(delivery=='delivered' and '✅ Envoi terminé : ')
+          or (delivery=='failed' and '❌ Échec de transmission : ')
+          or '⏳ En attente : ';
+        state.last_result=state.last_result .. detail;
     else
         state.last_result='Suivi du relais indisponible. HTTP ' .. tostring(code or '-') .. '.';
     end
+end
+local function retry_failed()
+    if not state.last_request_id then return end
+    local body='id=' .. urlenc(state.last_request_id);
+    local code, result=relay_request('POST','/retry',body);
+    if code==202 then state.last_delivery='queued';state.last_result='Réessai demandé au relais';
+    else state.last_result='Réessai refusé : '..tostring(result or code or '-'); end
 end
 local function render()
     if not state.is_open[1] then return end
@@ -180,6 +189,7 @@ local function render()
         imgui.Separator();
         imgui.TextWrapped('État : '..state.last_result);
         if state.last_request_id and imgui.Button('Vérifier le résultat Discord') then check_delivery() end
+        if state.last_request_id and state.last_delivery=='failed' and imgui.Button('Réessayer le même ToD') then retry_failed() end
         imgui.TextColored({1,0.62,0.4,1},'Aucune commande, cible ou attaque automatisée.');
     end
     imgui.End();

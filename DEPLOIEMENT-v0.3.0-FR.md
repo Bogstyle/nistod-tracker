@@ -47,7 +47,7 @@
 
 ## 2 — Préparer le relais local Node.js
 
-Node.js **20+** doit être installé (tu l'utilises déjà pour le Worker). Le relais est un processus séparé à démarrer lorsque tu souhaites envoyer des ToD ; il ne modifie rien dans FFXI.
+Node.js **22.5+ recommandé** doit être installé (le relais fonctionne dès Node 20, mais les tests SQLite du Worker nécessitent une version récente de Node 22) (tu l'utilises déjà pour le Worker). Le relais est un processus séparé à démarrer lorsque tu souhaites envoyer des ToD ; il ne modifie rien dans FFXI.
 
 1. Copier les fichiers `addon/nistod/` (`nistod.lua`, `catalog.lua`, `detector.lua`) dans le dossier d'addons VanaCore/Ashita **pour un banc de test autorisé**.
 2. Ouvrir PowerShell dans le dossier `relay` de cette archive :
@@ -84,7 +84,7 @@ L'interface démarre **en simulation**. Sélectionner un NM, cliquer `Déclarer 
 
 Pour un **vrai ToD** constaté, après installation autorisée et test du relais, cliquer `Activer envoi manuel`, choisir le NM, confirmer la mort, puis ajuster au besoin l’heure UTC avec les boutons ±1/5 min et cliquer `CONFIRMER ET TRANSMETTRE`. Le relais renvoie d'abord **en attente** ; cliquer `Vérifier le résultat Discord` pour confirmer la réception finale. Si l'envoi échoue, une file d'attente locale réessaie sans bloquer le jeu. Un signalement contradictoire apparaît dans `#log` mais ne remplace pas le ToD en cours.
 
-Commandes : `/nistod show`, `/nistod hide`, `/nistod status`, `/nistod stop` (coupe envoi et suggestions immédiatement), `/nistod start` (relance suggestions, mais **pas l'envoi**), `/addon unload nistod` (désinstaller de la session).
+Commandes : `/nistod show`, `/nistod hide`, `/nistod status`, `/nistod stop` (coupe envoi et suggestions immédiatement), `/nistod start` (relance suggestions, mais **pas l'envoi**), `/addon unload nistod` (désinstaller de la session). Pour arrêter **tout** le circuit, arrêter également le processus du relais avec `Ctrl+C`, puis utiliser `/nistod-delier` pour révoquer le jeton.
 
 ## Sécurité et limites actuelles
 

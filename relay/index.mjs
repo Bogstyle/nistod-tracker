@@ -92,6 +92,18 @@ export function createRelayServer(state,saveState=atomicSave,remoteFetch=fetch){
       const id=url.searchParams.get('id');const item=state.queue.find(x=>x.client_request_id===id);
       writeJson(res,item?200:404,item?{ok:true,state:item.state,message:item.message||'',event_id:item.event_id_server||null}:{ok:false,error:'Envoi inconnu'});return;
     }
+    if(req.method==='POST'&&url.pathname==='/retry'){
+      if(!/^application\/x-www-form-urlencoded/i.test(req.headers['content-type']||'')){writeJson(res,415,{ok:false,error:'Content-Type invalide'});return;}
+      try{
+        const body=Object.fromEntries(new URLSearchParams(await parseBody(req)));
+        const item=state.queue.find(x=>x.client_request_id===body.id);
+        if(!item||item.state!=='failed'){writeJson(res,409,{ok:false,error:'Aucun envoi en échec réessayable'});return;}
+        if(!state.token){writeJson(res,409,{ok:false,error:'Relais non appairé'});return;}
+        item.state='queued';item.message='Nouvelle tentative demandée';item.attempts=0;item.next_attempt_at=Date.now();
+        saveState(state);writeJson(res,202,{ok:true,state:item.state,id:item.client_request_id});
+        void flush().catch(e=>console.error('Réessai :',String(e.message||e)));
+      }catch{if(!res.headersSent)writeJson(res,400,{ok:false,error:'Corps de requête invalide'});}return;
+    }
     if(req.method==='POST'&&url.pathname==='/submit'){
       if(!/^application\/x-www-form-urlencoded/i.test(req.headers['content-type']||'')){writeJson(res,415,{ok:false,error:'Content-Type invalide'});return;}
       try{

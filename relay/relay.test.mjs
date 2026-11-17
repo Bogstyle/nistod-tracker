@@ -40,3 +40,18 @@ test('relay conserve la même identité d’événement après erreur HTTP',asyn
  await r.flush();assert.equal(state.queue[0].state,'delivered');
  assert.equal(received.length,2);assert.equal(received[0].event_id,received[1].event_id);
 });
+
+test('relancer un refus permanent exige une action manuelle et conserve event_id',async t=>{
+ let attempt=0;const seen=[];
+ const {port,state,r}=await withServer(t,async(url,opts)=>{
+   seen.push(JSON.parse(opts.body));attempt++;
+   if(attempt===1)return new Response(JSON.stringify({ok:false,error:'Accès provisoirement refusé'}),{status:401,headers:{'content-type':'application/json'}});
+   return new Response(JSON.stringify({ok:true,state:'accepted'}),{status:200,headers:{'content-type':'application/json'}});
+ });
+ const root='http://127.0.0.1:'+port;const headers={'content-type':'application/x-www-form-urlencoded','x-nistod-local-key':state.local_key};
+ const first=await fetch(root+'/submit',{method:'POST',headers,body:params()});assert.equal(first.status,202);
+ await r.flush();assert.equal(state.queue[0].state,'failed');
+ const rep=await fetch(root+'/retry',{method:'POST',headers,body:new URLSearchParams({id:state.queue[0].client_request_id})});assert.equal(rep.status,202);
+ await r.flush();assert.equal(state.queue[0].state,'delivered');
+ assert.equal(seen.length,2);assert.equal(seen[0].event_id,seen[1].event_id);
+});
